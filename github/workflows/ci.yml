@@ -1,0 +1,73 @@
+name: CI
+
+on: push
+
+env:
+  API: 16624334370041422
+  pathOutputBuild: build/Android/Android.apk
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  checklicense:
+    name: Check for UNITY_LICENSE
+    runs-on: ubuntu-latest
+    outputs:
+      is_unity_license_set: ${{ steps.checklicense_job.outputs.is_unity_license_set }}
+    steps:
+      - name: Check whether unity activation requests should be done
+        id: checklicense_job
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: |
+            echo "Skip activation job: ${{ env.UNITY_LICENSE != '' }}"
+            export is_unity_license_set="${{ env.UNITY_LICENSE != '' }}"
+            echo "is_unity_license_set=$is_unity_license_set" >> $GITHUB_OUTPUT
+  build:
+    needs: checklicense
+    if: needs.checklicense.outputs.is_unity_license_set == 'true'
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          lfs: true
+
+      # Cache
+      - uses: actions/cache@v3
+        with:
+          path: Library
+          key: Library-build-Android
+
+      - name: delete cache gradle
+        run: |
+          if [ -f "Library/Bee/Android/Prj/IL2CPP/Gradle/build.gradle" ]; then 
+            rm Library/Bee/Android/Prj/IL2CPP/Gradle/build.gradle
+            echo "File deleted."
+          else
+            echo "File does not exist."
+          fi
+          
+      # Build
+      - name: Build project
+        uses: game-ci/unity-builder@v2
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: Android
+          androidAppBundle: false
+          androidVersionCode: 100
+          buildMethod: UnityBuilderAction.BuildScript.Build
+      - name: On job failure
+        working-directory: "./project"
+        if: ${{ always() && job.status == 'failure' }}
+        run: node src/controllers/send_notif.js ${{ secrets.USER_ID }} buildApp failure 'Failed create ${{env.typeBuild}}' 

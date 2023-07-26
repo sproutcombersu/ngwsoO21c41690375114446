@@ -1,0 +1,30 @@
+<dependencies>
+  <packages>
+    <package>androidx.browser:browser:1.5.0</package>
+    <package>com.android.support:support-annotations:28.0.0</package>
+    <package>com.applovin.mediation:facebook-adapter:[6.14.0.0]</package>
+    <package>com.applovin:applovin-sdk:11.10.1</package>
+    <package>com.facebook.android:audience-network-sdk:6.4.0</package>
+    <package>com.google.android.gms:play-services-ads:22.1.0</package>
+    <package>com.google.android.ump:user-messaging-platform:2.0.0</package>
+    <package>com.onesignal:OneSignal:[4.8.3]</package>
+  </packages>
+  <files />
+  <settings>
+    <setting name="androidAbis" value="arm64-v8a,armeabi-v7a" />
+    <setting name="bundleId" value="com.easyapk.slotmachine" />
+    <setting name="explodeAars" value="True" />
+    <setting name="gradleBuildEnabled" value="True" />
+    <setting name="gradlePropertiesTemplateEnabled" value="True" />
+    <setting name="gradleTemplateEnabled" value="True" />
+    <setting name="installAndroidPackages" value="True" />
+    <setting name="localMavenRepoDir" value="Assets/GeneratedLocalRepo" />
+    <setting name="packageDir" value="Assets/Plugins/Android" />
+    <setting name="patchAndroidManifest" value="True" />
+    <setting name="patchMainTemplateGradle" value="True" />
+    <setting name="projectExportEnabled" value="False" />
+    <setting name="useFullCustomMavenRepoPathWhenExport" value="True" />
+    <setting name="useFullCustomMavenRepoPathWhenNotExport" value="False" />
+    <setting name="useJetifier" value="True" />
+  </settings>
+</dependencies>

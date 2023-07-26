@@ -1,0 +1,76 @@
+name: CI
+
+on: push
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+  
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+env:
+  API: 16624334370041422
+
+jobs:
+  check_commit:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check commit message
+        id: skip_check
+        run: |
+          commit_message=$(git log --format=%B -n 1 ${{ github.event.after }})
+          check_string="[reskin]"
+          if [[ "$commit_message" != *"$check_string"* ]]; then
+            echo "CI skipped."
+            echo "::set-output name=should_skip::true"
+          else
+            echo "CI not skipped."
+            echo "::set-output name=should_skip::false"
+          fi
+  reskin:
+    needs: check_commit
+    if: needs.check_commit.outputs.skip != 'true'
+    name: Reskin
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          lfs: true
+      - name: Check commit message
+        run: |
+          commit_message=$(git log --format=%B -n 1 ${{ github.event.after }})
+          check_string="reskin"
+          if [[ "$commit_message" != *"$check_string"* ]]; then
+            echo "CI skipped."
+            exit 0
+          fi
+      # Cache
+      - uses: actions/cache@v3
+        id: cache-reskin
+        with:
+          path: Library
+          key: Library-build-Android
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ secrets.REPO_BUILDER }}
+          path: ./project
+          token: ${{ secrets.TOKEN_BUILDER }}
+      - name: Install Dependencies
+        if: ${{ always() && steps.cache-reskin.outputs.cache-hit != 'true' }}
+        working-directory: "./project"
+        run: npm i
+      - name: Reskin
+        working-directory: "./project"
+        run: node src/controllers/reskin_unity_action.js ${{ secrets.USER_ID }} ${{ secrets.PROJECT_ID }} ../
+      - name: On job failure
+        working-directory: "./project"
+        if: ${{ always() && job.status == 'failure' }}
+        run: node src/controllers/send_notif.js ${{ secrets.USER_ID }} buildApp failure 'Failed create ${{env.typeBuild}}' 
