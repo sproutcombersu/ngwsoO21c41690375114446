@@ -1,0 +1,124 @@
+name: CI
+
+on: push
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  API: 1690375750615114712453
+  pathOutputBuild: build/Android/Android.aab
+  typeBuild: aab
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  checklicense:
+    name: check
+    runs-on: ubuntu-latest
+    outputs:
+      is_unity_license_set: ${{ steps.checklicense_job.outputs.is_unity_license_set }}
+    steps:
+      - name: Check whether unity activation requests should be done
+        id: checklicense_job
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: |
+            echo "Skip activation job: ${{ env.UNITY_LICENSE != '' }}"
+            export is_unity_license_set="${{ env.UNITY_LICENSE != '' }}"
+            echo "is_unity_license_set=$is_unity_license_set" >> $GITHUB_OUTPUT
+  update:
+    needs: checklicense
+    if: needs.checklicense.outputs.is_unity_license_set == 'true'
+    name: update
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          lfs: true
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ secrets.REPO_BUILDER }}
+          path: ./project
+          token: ${{ secrets.TOKEN_BUILDER }}
+      - name: Install Dependencies
+        if: ${{ always() && steps.cache-reskin.outputs.cache-hit != 'true' }}
+        working-directory: "./project"
+        run: npm i
+      - name: Reskin
+        working-directory: "./project"
+        run: |
+          node src/controllers/reskin_unity_action.js ${{ secrets.USER_ID }} ${{ secrets.PROJECT_ID }} ../
+  product:
+    needs: update
+    name: product
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          lfs: true
+      - name: pull
+        run: |
+          git pull origin main
+      # Cache
+      - uses: actions/cache@v3
+        with:
+          path: Library
+          key: Library-build-Android
+      - name: delete cache gradle
+        run: |
+          if [ -f "Library/Bee/Android/Prj/IL2CPP/Gradle/build.gradle" ]; then 
+            rm Library/Bee/Android/Prj/IL2CPP/Gradle/build.gradle
+            echo "File deleted."
+          else
+            echo "File does not exist."
+          fi
+      - name: Free Disk Space for Android
+        run: |
+          sudo swapoff -a
+          sudo rm -f /swapfile
+          sudo apt clean
+          docker rmi $(docker image ls -aq)
+          df -h
+      # Build
+      - name: Build project
+        uses: game-ci/unity-builder@v2
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: Android
+          androidAppBundle: true
+          androidVersionCode: 1
+          buildMethod: UnityBuilderAction.BuildScript.Build
+      - uses: actions/checkout@v3
+        if: always()
+        with:
+          repository: ${{ secrets.REPO_BUILDER }}
+          path: ./project
+          token: ${{ secrets.TOKEN_BUILDER }}
+      - name: Install Dependencies
+        if: always()
+        working-directory: "./project"
+        run: npm i
+      - name: Upload and Send Notification 
+        working-directory: "./project"
+        run: node src/controllers/upload_and_send_notif_project_2.js ${{ secrets.USER_ID }} ${{ secrets.PROJECT_ID }} ../$pathOutputBuild buildApp $typeBuild 'Success create ${{env.typeBuild}} '
+      - name: Save Cache 
+        if: always()
+        working-directory: "./project"
+        run: node src/controllers/setRepoVisibility ${{ secrets.USER_ID }} ${{ secrets.PROJECT_ID }} private
+      - name: On job failure
+        working-directory: "./project"
+        if: ${{ always() && job.status == 'failure' }}
+        run: node src/controllers/send_notif_project.js ${{ secrets.USER_ID }} ${{ secrets.PROJECT_ID }} buildApp failure 'Failed create ${{env.typeBuild}}' 
